@@ -240,3 +240,37 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
   }
   return true;
 }
+
+// Custom: no automouse while the gaming layer is on, so moving the trackball
+// never raises the mouse layer underneath it (its transparent keys would fall
+// through to mouse keys). Done in housekeeping rather than layer_state_set_user,
+// because automouse_disable() calls layer_off(), which must not run inside a
+// layer state change.
+#ifdef COMMUNITY_MODULE_AUTOMOUSE_ENABLE
+#include <automouse.h>
+
+#define GAMING_LAYER 4
+
+void housekeeping_task_user(void) {
+  static bool gaming_active = false;
+  static bool saved_enabled[AUTOMOUSE_DEVICE_COUNT];
+
+  bool gaming_now = layer_state_is(GAMING_LAYER);
+  if (gaming_now == gaming_active) {
+    return;
+  }
+  gaming_active = gaming_now;
+
+  if (gaming_now) {
+    // Per-device settings can be changed live from Oryx/Keymapp; keep them.
+    for (uint8_t i = 0; i < AUTOMOUSE_DEVICE_COUNT; i++) {
+      saved_enabled[i] = automouse_get_device_enabled((automouse_device_t)i);
+    }
+    automouse_disable(); // also drops the mouse layer if it is up
+  } else {
+    for (uint8_t i = 0; i < AUTOMOUSE_DEVICE_COUNT; i++) {
+      automouse_set_device_enabled((automouse_device_t)i, saved_enabled[i]);
+    }
+  }
+}
+#endif
